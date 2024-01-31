@@ -129,6 +129,13 @@ func (o *LoginOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []s
 			return err
 		}
 		o.Server = addr.String()
+		if defaultContext, defaultContextExists := o.StartingKubeConfig.Contexts[o.StartingKubeConfig.CurrentContext]; defaultContextExists {
+			if cluster, exists := o.StartingKubeConfig.Clusters[defaultContext.Cluster]; exists {
+				if o.Server == cluster.Server {
+					o.ProxyURL = cluster.ProxyURL
+				}
+			}
+		}
 
 	} else if len(args) == 1 {
 		if err := addr.Set(args[0]); err != nil {
@@ -140,6 +147,7 @@ func (o *LoginOptions) Complete(f kcmdutil.Factory, cmd *cobra.Command, args []s
 		if defaultContext, defaultContextExists := o.StartingKubeConfig.Contexts[o.StartingKubeConfig.CurrentContext]; defaultContextExists {
 			if cluster, exists := o.StartingKubeConfig.Clusters[defaultContext.Cluster]; exists {
 				o.Server = cluster.Server
+				o.ProxyURL = cluster.ProxyURL
 			}
 		}
 	}

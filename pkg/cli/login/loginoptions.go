@@ -96,6 +96,7 @@ type LoginOptions struct {
 	RequestTimeout time.Duration
 
 	genericiooptions.IOStreams
+	ProxyURL string
 }
 
 type passwordPrompter func(r io.Reader, w io.Writer, format string, a ...interface{}) string
@@ -158,6 +159,9 @@ func (o *LoginOptions) getClientConfig() (*restclient.Config, error) {
 	o.Server = serverNormalized
 	clientConfig.Host = o.Server
 	clientConfig.Insecure = o.InsecureTLS
+	clientConfig.Proxy = func(*http.Request) (*url.URL, error) {
+		return url.Parse(o.ProxyURL)
+	}
 
 	if !o.InsecureTLS {
 		// use specified CA or find existing CA
@@ -304,6 +308,9 @@ func (o *LoginOptions) gatherAuthInfo() error {
 	clientConfig.KeyData = []byte{}
 	clientConfig.CertFile = o.CertFile
 	clientConfig.KeyFile = o.KeyFile
+	clientConfig.Proxy = func(*http.Request) (*url.URL, error) {
+		return url.Parse(o.ProxyURL)
+	}
 
 	var token string
 	if o.WebLogin {
