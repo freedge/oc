@@ -2,6 +2,7 @@ package rfc2307
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-ldap/ldap/v3"
 
@@ -136,6 +137,43 @@ func (e *LDAPInterface) GroupEntryFor(ldapGroupUID string) (*ldap.Entry, error) 
 	return group, nil
 }
 
+// check for a member;range attribute and in that case rename it "member" and fetch more
+// members
+func (e *LDAPInterface) completeGroup(group *ldap.Entry, ldapGroupUID string) error {
+	var needsMore *ldap.EntryAttribute = nil
+	var previous *ldap.EntryAttribute = nil
+	for _, attr := range group.Attributes {
+		if strings.HasPrefix(attr.Name, "member;range=0-1499") {
+			needsMore = attr
+		}
+		if attr.Name == "member" {
+			previous = attr
+		}
+	}
+
+	if needsMore != nil {
+		if previous != nil {
+			previous.Name="999ignored"
+		}
+		needsMore.Name="member"
+		extraSearchRequest, err := e.groupQuery.NewSearchRequest(ldapGroupUID, []string{"member;range=1500-2999"})
+		if err != nil {
+			return err
+		}
+		group2, err := ldapquery.QueryForUniqueEntry(e.ldapClient, extraSearchRequest)
+		if err != nil {
+			return err
+		}
+		for _, attr2 := range group2.Attributes {
+			if strings.HasPrefix(attr2.Name, "member;range=1500-*") {
+				needsMore.Values = append(needsMore.Values, attr2.Values...)
+				needsMore.ByteValues = append(needsMore.ByteValues, attr2.ByteValues...)
+			}
+		}
+	}
+	return nil
+}
+
 // ListGroups queries for all groups as configured with the common group filter and returns their
 // LDAP group UIDs. This also satisfies the LDAPGroupLister interface
 func (e *LDAPInterface) ListGroups() ([]string, error) {
@@ -150,6 +188,9 @@ func (e *LDAPInterface) ListGroups() ([]string, error) {
 		ldapGroupUID := ldaputil.GetAttributeValue(group, []string{e.groupQuery.QueryAttribute})
 		if len(ldapGroupUID) == 0 {
 			return nil, fmt.Errorf("unable to find LDAP group UID for %s", group.DN)
+		}
+		if err = e.completeGroup(group, ldapGroupUID); err != nil {
+			return nil, err
 		}
 		e.cachedGroups[ldapGroupUID] = group
 		ldapGroupUIDs = append(ldapGroupUIDs, ldapGroupUID)
